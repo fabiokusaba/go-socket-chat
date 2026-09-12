@@ -7,11 +7,19 @@ import (
 	"net"
 )
 
+type ChatGroup struct {
+	Connections []net.Conn
+}
+
 func main() {
 	listener, err := net.Listen("tcp", "localhost:8080")
 	if err != nil {
 		fmt.Println("Error ao subir o servidor")
 		return
+	}
+
+	chatGroup := &ChatGroup{
+		Connections: []net.Conn{},
 	}
 
 	defer listener.Close()
@@ -25,11 +33,12 @@ func main() {
 			return
 		}
 
-		go handleConnection(connection)
+		chatGroup.Connections = append(chatGroup.Connections, connection)
+		go handleConnection(connection, chatGroup)
 	}
 }
 
-func handleConnection(connection net.Conn) {
+func handleConnection(connection net.Conn, chat *ChatGroup) {
 	defer connection.Close()
 
 	fmt.Println("Novo cliente conectado")
@@ -47,16 +56,24 @@ func handleConnection(connection net.Conn) {
 
 		fmt.Printf("Mensagem recebida [%s] - Mensagem [%s]\n", message.SenderName, message.MessageText)
 
-		_, err = connection.Write([]byte(message.ToJsonString()))
-		if err != nil {
-			fmt.Println("Error ao enviar a mensagem para o cliente")
-			break
+		for _, userConn := range chat.Connections {
+			if userConn == connection {
+				continue
+			}
+			
+			fmt.Printf("Mensagem [%s] - enviada para [%s]\n", message.MessageText, userConn.RemoteAddr())
+
+			_, err = userConn.Write([]byte(message.ToJsonString()))
+			if err != nil {
+				fmt.Println("Error ao enviar a mensagem para o cliente")
+				break
+			}
 		}
 	}
 }
 
 type Message struct {
-	SenderName string
+	SenderName  string
 	MessageText string
 }
 
@@ -75,7 +92,7 @@ func FromJsonString(data string) (Message, error) {
 	return message, nil
 }
 
-func(m Message) ToJsonString() string {
+func (m Message) ToJsonString() string {
 	data, err := json.Marshal(m)
 	if err != nil {
 		return ""
