@@ -2,10 +2,13 @@ package main
 
 import (
 	"bufio"
+	"client/ui"
 	"encoding/json/v2"
 	"fmt"
 	"net"
 	"os"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -24,37 +27,22 @@ func main() {
 		user = usernameInput.Text()
 	}
 
+	model := ui.InitModel(serverConnection, user)
+	p := tea.NewProgram(model)
+
 	go func() {
 		serverScanner := bufio.NewScanner(serverConnection)
 
 		for serverScanner.Scan() {
 			serverText := serverScanner.Text()
-
-			serverMessage, _ := FromJsonString(serverText)
-			fmt.Printf("[%s]: %s\n", serverMessage.SenderName, serverMessage.MessageText)
+			serverMessage, _ := ui.FromJsonString(serverText)
+			p.Send(serverMessage)
 		}
 	}()
 
-	scannerInput := bufio.NewScanner(os.Stdin)
-	fmt.Println("Digite a sua mensagem:")
-
-	for {
-		if !scannerInput.Scan() {
-			break
-		}
-
-		msgText := scannerInput.Text()
-
-		message := Message{
-			SenderName: user,
-			MessageText: msgText,
-		}
-
-		_, err := serverConnection.Write([]byte(message.ToJsonString()))
-		if err != nil {
-			fmt.Println("Error ao enviar a mensagem")
-			break
-		}
+	if _, err := p.Run(); err != nil {
+		fmt.Println("Error ao inicializar a UI")
+		return
 	}
 }
 
